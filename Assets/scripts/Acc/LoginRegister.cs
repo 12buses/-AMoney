@@ -1,12 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Networking;
-
-using Newtonsoft.Json;
 
 
 public class LoginRegister : MonoBehaviour
@@ -16,14 +15,19 @@ public class LoginRegister : MonoBehaviour
     public InputField _pass; //поле для ввода пароля 
     public InputField _RewritePass; //поле для повторного ввода пароля 
 
-    public string OutPass;
-    public static string url;
+    private string OutPass;
+    private string OutEmail;
+    private string OutLogin;
 
     public Text ROUPinUnityObj; //объект с текстом объясняющий почему пароль не подошёл 
+    public Text ROULinUnityObj; //объект с текстом объясняющий почему логин не подошёл 
 
-    private bool CheckPassed; //подходит ли пароль
+    private bool CheckOfPassPassed;//подходит ли пароль
+    private bool CheckOfEmailPassed;//подходит ли почта
+    private bool CheckOfLoginPassed;//подходит ли логин
 
-    public List<string> ReasonOfUnsuitablePassword = new List<string>();    //текст объясняющий почему пароль не подошёл 
+    private List<string> ReasonOfUnsuitablePassword;    //текст объясняющий почему пароль не подошёл 
+    private List<string> ReasonOfUnsuitableNick;    //текст объясняющий почему логин не подошёл 
 
 
     public class user //класс пользователей
@@ -40,31 +44,27 @@ public class LoginRegister : MonoBehaviour
     public class ourUser : user //текущий пользователь 
     {
         public string _password { get; set; }
-        public bool CheckStatus { get; set; }
-        public string SendType { get; set; }
-        public bool CheckOfSuitblePass { get; set; }
-        public ourUser(string _name, string _mail, string password, string _sendType, bool _checkStatus, bool _check)
+        public ourUser(string _name, string _mail, string password)
             : base(_name, _mail)
         {
             _password = password;
-            CheckStatus = _checkStatus;
-            SendType = _sendType;
-            CheckOfSuitblePass = _check;
         }
     }
 
 
+
     public void Register()//регестрация
     {
+        ReasonOfUnsuitablePassword = new List<string>();
         OutPass = null;
         ROUPinUnityObj.text = "";
-        CheckPassed = true; //сбрасывает значение проверки пароля на надёжность
+        CheckOfPassPassed = true; //сбрасывает значение проверки пароля на надёжность
 
         if (_email.text != null && _pass.text != null && _pass.text == _RewritePass.text && _nick.text != null) //проверка что поля заполнены и поля для ввода пароля совподают
         {
-            StartCoroutine(NameEmailPassCheking("Reg")); //вызов проверки пароля на безопасность, почты и нейма на уникальность,  следуйший код выполниться после завершения этого
+            StartCoroutine(NameEmailPassCheking()); //вызов проверки пароля на безопасность, почты и нейма на уникальность,  следуйший код выполниться после завершения этого
 
-            if (CheckPassed == true) //если пароль подходит
+            if (CheckOfPassPassed == true) //если пароль подходит
             {
                 
                 
@@ -89,9 +89,9 @@ public class LoginRegister : MonoBehaviour
     {
         if (_pass.text != null && _nick.text != null) //проверка что поля заполнены
         {
-            StartCoroutine(NameEmailPassCheking("Login"));
+            StartCoroutine(NameEmailPassCheking());
 
-            if (CheckPassed == true) //аутентификация прошла 
+            if (CheckOfPassPassed == true) //аутентификация прошла 
             {
 
 
@@ -111,101 +111,109 @@ public class LoginRegister : MonoBehaviour
         }
     }
 
-    IEnumerator NameEmailPassCheking(string SendType) 
-    {
+    IEnumerator NameEmailPassCheking() 
+    {    
+        //проверка пароля на соответсвие требованиям 
+        bool IsLetter = true;
 
-        if (SendType == "Reg")
+        if (_pass.text.Length < 6 || _pass.text.Length > 15)
         {
-            //проверка пароля на соответсвие требованиям 
-            bool IsLetter = true;
-
-            if (_pass.text.Length < 6)
-            {
-                ReasonOfUnsuitablePassword.Add("*Количество символов в пароле должно быть не меньше 6");
-                CheckPassed = false;
-            }
-
-
-            if (_pass.text.Any(char.IsLetter) == false)
-            {
-                ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
-                IsLetter = false;
-                CheckPassed = false;
-            }
-
-
-            if (_pass.text.Any(char.IsDigit) == false)
-            {
-                ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 цыфру");
-                CheckPassed = false;
-            }
-
-
-            if (_pass.text.Any(char.IsLower) == false && IsLetter == true)
-            {
-                ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
-                CheckPassed = false;
-            }
-
-
-            if (_pass.text.Any(char.IsUpper) == false && IsLetter == true)
-            {
-                ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
-                CheckPassed = false;
-            }
+            ReasonOfUnsuitablePassword.Add("*Количество символов в пароле должно быть не меньше 6");
+            CheckOfPassPassed = false;
         }
 
-        ourUser _thisUserData = new ourUser(_nick.text, _email.text, _pass.text, SendType, CheckPassed); //создание объекта нового пользователя, серилизация в json файл и передача серверу.
-        _thisUserData._password = _pass.text;
-        _thisUserData._mail = _email.text;
-        _thisUserData._name = _nick.text;
-        _thisUserData.SendType = SendType;
-        _thisUserData.CheckOfSuitblePass = CheckPassed;
-        string JsonUserData = JsonConvert.SerializeObject(_thisUserData);
-        List<IMultipartFormSection> form = new List<IMultipartFormSection>() { };
-        form.Add(new MultipartFormDataSection("myField", JsonUserData));
-        using (UnityWebRequest webRequest = UnityWebRequest.Post(url, form, "json"))//отправление данных для проверки уникальности ника и почты данных у сервера
+        string _allowedCharsInPass = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789~!?@#$%^&*_-+()[]{}></\\|\"'.,:;";
+        if (_pass.text.All(c => _allowedCharsInPass.Contains(c)) == false)
         {
-            //отправляем данные
-            yield return webRequest.SendWebRequest();
-            // Проверяем наличие ошибок
-            if (webRequest.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError("Ошибка: " + webRequest.error);
-            }
+            ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы, также в пароле могут использоваться только латинские буквы, цифры и эти символы: ~ ! ? @ # $ % ^ & * _ - + ( ) [ ] { } > < / \\ | \" ' . , : ;.");
+            IsLetter = false;
+            CheckOfPassPassed = false;
         }
 
 
-        using (UnityWebRequest webRequest = UnityWebRequest.Get(url))//получение данных о проверке уникальности данных пользавателя 
+        if (_pass.text.Any(char.IsLetter) == false)
         {
-            // Отправляем запрос
-            yield return webRequest.SendWebRequest();
-            // Проверяем наличие ошибок
-            if (webRequest.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogError("Ошибка: " + webRequest.error);
-            }
-            else
-            {
-                // Получаем данные
-                string jsonResult = webRequest.downloadHandler.text;
-                ourUser CheckStatus = JsonConvert.DeserializeObject<ourUser>(jsonResult);
-                if(CheckStatus.CheckStatus != true)
-                {
-                    if(SendType == "Reg")
-                    {
-                        ReasonOfUnsuitablePassword.Add("*Ваше имя/почта уже зарегестриравано");
-                    }
-                    else
-                    {
-                        ReasonOfUnsuitablePassword.Add("*Ваше имя или пароль неверны.");
-                    }
-                    CheckPassed = false;
-                }
-            }
+            ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
+            IsLetter = false;
+            CheckOfPassPassed = false;
         }
 
-        yield return CheckPassed;
+
+        if (_pass.text.Any(char.IsDigit) == false)
+        {
+            ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 цифру");
+            CheckOfPassPassed = false;
+        }
+
+
+        if (_pass.text.Any(char.IsLower) == false && IsLetter == true)
+        {
+            ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
+            CheckOfPassPassed = false;
+        }
+
+
+        if (_pass.text.Any(char.IsUpper) == false && IsLetter == true)
+        {
+            ReasonOfUnsuitablePassword.Add("*Пароль должен содержать хотя-бы 1 строчную и 1 заглавную буквы");
+            CheckOfPassPassed = false;
+        }
+
+
+        //проверка почты 
+        if (_email.text.Length > 50)// Проверяем длину адреса
+        {
+            CheckOfEmailPassed = false;
+        }
+
+        
+        if (_email.text.IndexOf('@') != _email.text.LastIndexOf('@')) // Проверяем наличие одного символа @
+        {
+            CheckOfEmailPassed = false;
+        }
+        else
+        {
+            int atIndex = _email.text.IndexOf('@');
+            if (atIndex <= 0 || atIndex >= _email.text.Length - 1) // Проверяем, что до и после @ есть хотя бы один допустимый символ
+            {
+                CheckOfEmailPassed = false;
+            }
+        }
+        
+
+        if (Regex.IsMatch(_email.text, @"^[a-zA-Z0-9._%-]+@[a-zA-Z0-9.-]+$") != true)
+        {
+            CheckOfEmailPassed = false;
+        }
+
+        if (Regex.IsMatch(_email.text, @"\.\.") || Regex.IsMatch(_email.text, @"^[&][=][+][<][>][,][`]$"))
+        {
+            CheckOfEmailPassed = false;
+        }
+
+        if (_email.text.Contains(" "))
+        {
+            CheckOfEmailPassed = false;
+        }
+
+
+
+        //проверка логина 
+        if (_nick.text.Length < 3 || _nick.text.Length > 15) 
+        {
+            CheckOfLoginPassed = false;
+            ReasonOfUnsuitableNick.Add("*Логин должен быть длиной от 3 до 15 символов.");
+        }
+
+        if (!Regex.IsMatch(_nick.text, @"^[a-zA-Z0-9]{3,15}$"))
+        {
+            ReasonOfUnsuitableNick.Add("*Логин может содержать только латинские буквы и цифры.");
+            CheckOfLoginPassed = false;
+        }
+
+
+        yield return CheckOfPassPassed;
         StopCoroutine(NameEmailPassCheking()); //заверешение проверки => переход назад к функции
+    
     }
 }
